@@ -55,3 +55,4 @@ target/
 
 config.py
 /dist/
+/confs/sherlog.json
