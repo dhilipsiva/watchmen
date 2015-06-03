@@ -187,6 +187,7 @@ def ensure_sherlog_node_deps():
     ensure Sherlog's node deps
     """
     with nodeenv(env.sherlog_env):
+        run("npm install -g bower")
         run("cd %s && npm install && bower install --config.interactive=false"
             % env.sherlog_path)
         run("npm install -g gulp")
@@ -239,8 +240,6 @@ def ensure_sherlog_deps():
     ])
 
 
-@task
-@roles(SHERLOG)
 def upload_sherlog_conf():
     files.upload_template(
         env.sherlog_conf_template, env.sherlog_conf,
@@ -261,6 +260,5 @@ def setup_sherlog():
     ensure_sherlog_deps()
     working_copy(env.sherlog_remote, env.sherlog_path)
     ensure_nodeenv(env.sherlog_env)
-    with nodeenv(env.sherlog_env):
-        run("npm install -g bower")
     ensure_sherlog_node_deps()
+    upload_sherlog_conf()
