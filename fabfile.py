@@ -12,16 +12,17 @@
 
 import posixpath
 from pipes import quote
-from os.path import join, expanduser
 from contextlib import contextmanager
+from os.path import join, expanduser, basename
 
 import requests
 
 from fabric.state import env
 from fabric.contrib import files
-from fabric.operations import get
 from fabric.decorators import roles
-from fabric.api import run, task, sudo, prefix
+from fabric.operations import get, settings
+from fabric.colors import _wrap_with as wrap_with
+from fabric.api import run, task, sudo, prefix, hide, abort
 
 from fabtools import user, require
 from fabtools.files import is_file
@@ -34,6 +35,7 @@ from config import roledefs, SHERLOG, SHERLOG_TITLE, SHERLOG_USER, \
     SHERLOG_MONGO_PASS
 
 vagrant = vagrant  # Silence flake8
+red_bg = wrap_with('41')
 
 # GitHub users who have/will have ssh access (deploy access) to the server
 SSH_USERS = ['dhilipsiva']
@@ -43,12 +45,26 @@ env.repository = 'git@github.com:dhilipsiva/watchmen.git'
 env.deploy_user = env.project
 env.deploy_user_home = join("/home", env.deploy_user)
 env.apps_path = join(env.deploy_user_home, 'apps')
+env.envs_path = join(env.deploy_user_home, 'envs')
 env.code_root = join(env.apps_path, env.project)
-env.local_conf_folder = "confs"
+env.logs_folder = "%(deploy_user_home)s/logs/" % env
+env.confs_folder_local = "confs"
+env.confs_folder = "%(deploy_user_home)s/confs" % env
+
+# Nginx configs
+env.nginx_conf_temaplte = "%s/nginx.conf" % env.confs_folder_local
+env.nginx_conf = '%s/nginx.conf' % env.confs_folder
+env.ssl_folder = "%(deploy_user_home)s/ssl" % env
+env.ssl_crt = "%(ssl_folder)s/%(project)s.crt" % env
+env.ssl_key = "%(ssl_folder)s/%(project)s.key" % env
+env.ssl_crt_local = "%(confs_folder_local)s/%(project)s.crt" % env
+env.ssl_key_local = "%(confs_folder_local)s/%(project)s.key" % env
+env.nginx_enable_path = "/etc/nginx/sites-enabled/"
 
 # Sherlog Configuration
-env.sherlog_env = join(env.deploy_user_home, "envs", SHERLOG)
-env.sherlog_path = join(env.deploy_user_home, "apps", SHERLOG)
+env.sherlog = SHERLOG
+env.sherlog_env = join(env.envs_path, SHERLOG)
+env.sherlog_path = join(env.apps_path, SHERLOG)
 env.sherlog_remote = "https://github.com/burakson/sherlogjs.git"
 env.sherlog_node_host = "localhost"
 env.sherlog_node_port = "3000"
@@ -61,7 +77,7 @@ env.sherlog_mongo_host = SHERLOG_MONGO_HOST
 env.sherlog_mongo_user = SHERLOG_MONGO_USER
 env.sherlog_mongo_pass = SHERLOG_MONGO_PASS
 env.sherlog_mongo_db = "sherlog"
-env.sherlog_conf_template = '%s/%s.json' % (env.local_conf_folder, SHERLOG)
+env.sherlog_conf_template = '%s/%s.json' % (env.confs_folder_local, SHERLOG)
 env.sherlog_conf = "%s/config/config.json" % env.sherlog_path
 
 
@@ -142,6 +158,16 @@ def sync_auth_keys():
                 % (quote(key["key"]), quote(authorized_keys_filename)))
 
 
+def ensure_dirs():
+    require.files.directories([
+        env.envs_path,
+        env.apps_path,
+        env.logs_folder,
+        env.confs_folder,
+        env.ssl_folder,
+        ], owner=env.deploy_user)
+
+
 def create_nodeenv(directory):
     directory = quote(directory)
     command = 'nodeenv %s' % directory
@@ -156,7 +182,6 @@ def nodeenv_exists(directory):
     return is_file(posixpath.join(directory, 'bin', 'node'))
 
 
-@task
 def ensure_nodeenv(nodeenv):
     sudo("pip install nodeenv")
     """
@@ -193,8 +218,6 @@ def ensure_sherlog_node_deps():
         run("npm install -g gulp")
 
 
-@task
-@roles('all')
 def ensure_common_deps():
     require.deb.uptodate_index()
     require.deb.packages([
@@ -230,13 +253,15 @@ def mongo_apt_config():
 
 
 @task
-@roles(SHERLOG)
+@roles('all')
 def ensure_sherlog_deps():
     # mongo_apt_config()
+    require.deb.ppa('ppa:nginx/stable')
     uptodate_index()
     require.deb.packages([
         # "mongodb-org",
         "mongodb",
+        "nginx"
     ])
 
 
@@ -248,6 +273,36 @@ def upload_sherlog_conf():
     with nodeenv(env.sherlog_env):
         run("cd %s && gulp" % env.sherlog_path)
     get("%s/public/js/sherlog.min.js" % env.sherlog_path, "generated")
+
+
+@task
+@roles('all')
+def upload_ssl_files():
+    files.upload_template(env.ssl_crt_local, env.ssl_crt)
+    files.upload_template(env.ssl_key_local, env.ssl_key)
+
+
+def test_nginx_conf():
+    with settings(
+            hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
+        res = sudo('nginx -t -c /etc/nginx/nginx.conf')
+    if 'test failed' in res:
+        abort(red_bg(
+            'NGINX configuration test failed!'
+            ' Please review your parameters.'))
+
+
+@task
+@roles('all')
+def upload_nginx_conf():
+    files.upload_template(
+        env.nginx_conf_temaplte, env.nginx_conf, context=env, use_sudo=True)
+    sudo(
+        'ln -sf %s %s/%s'
+        % (env.nginx_conf, env.nginx_enable_path, basename(env.nginx_conf)))
+    # sudo('rm -f %s%s' % (env.nginx_enable_path, 'default'))
+    test_nginx_conf()
+    sudo('nginx -s reload')
 
 
 @task
