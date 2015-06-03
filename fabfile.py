@@ -40,7 +40,6 @@ env.deploy_user = env.project
 env.deploy_user_home = join("/home", env.deploy_user)
 env.apps_path = join(env.deploy_user_home, 'apps')
 env.code_root = join(env.apps_path, env.project)
-env.sockets_path = join(env.code_root, 'sockets')
 env.sherlog_env = join(env.deploy_user_home, "envs", SHERLOG)
 env.sherlog_path = join(env.deploy_user_home, "apps", SHERLOG)
 env.sherlog_remote = "https://github.com/burakson/sherlogjs.git"
@@ -174,13 +173,17 @@ def ensure_sherlog_node_deps():
 @task
 @roles('all')
 def ensure_common_deps():
+    require.deb.uptodate_index()
     require.deb.packages([
-        "vim",
-        "build-essential",
-        "python-software-properties",
-        "supervisor",
-        "python-pip",
         "git",
+        "wget",
+        "curl",
+        "python-software-properties",
+        "python-dev",
+        "build-essential",
+        "supervisor",
+        "vim",
+        "python-pip",
     ])
 
 
@@ -191,10 +194,25 @@ def uptodate_index():
     require.deb.uptodate_index()
 
 
+def mongo_apt_config():
+    """
+    docstring for mongo_apt_config
+    """
+    sudo(
+        "apt-key adv --keyserver hkp://keyserver.ubuntu.com:80"
+        " --recv 7F0CEB10")
+    run('echo "deb http://repo.mongodb.org/apt/ubuntu'
+        ' "$(lsb_release -sc)"/mongodb-org/3.0 multiverse" |'
+        ' sudo tee /etc/apt/sources.list.d/mongodb-org-3.0.list')
+
+
 @task
-@roles("all")
+@roles(SHERLOG)
 def ensure_sherlog_deps():
+    # mongo_apt_config()
+    uptodate_index()
     require.deb.packages([
+        # "mongodb-org",
         "mongodb",
     ])
 
