@@ -47,9 +47,11 @@ env.deploy_user_home = join("/home", env.deploy_user)
 env.apps_path = join(env.deploy_user_home, 'apps')
 env.envs_path = join(env.deploy_user_home, 'envs')
 env.code_root = join(env.apps_path, env.project)
-env.logs_folder = "%(deploy_user_home)s/logs/" % env
+env.logs_folder = "%(deploy_user_home)s/logs" % env
 env.confs_folder_local = "confs"
 env.confs_folder = "%(deploy_user_home)s/confs" % env
+env.scripts_folder_local = "scripts"
+env.scripts_folder = "%(deploy_user_home)s/scripts" % env
 
 # Nginx configs
 env.nginx_conf_temaplte = "%s/nginx.conf" % env.confs_folder_local
@@ -65,6 +67,7 @@ env.nginx_enable_path = "/etc/nginx/sites-enabled/"
 env.sherlog = SHERLOG
 env.sherlog_env = join(env.envs_path, SHERLOG)
 env.sherlog_path = join(env.apps_path, SHERLOG)
+env.sherlog_log = "%(logs_folder)s/%(sherlog)s.log" % env
 env.sherlog_remote = "https://github.com/burakson/sherlogjs.git"
 env.sherlog_node_host = "localhost"
 env.sherlog_node_port = "3000"
@@ -79,6 +82,21 @@ env.sherlog_mongo_pass = SHERLOG_MONGO_PASS
 env.sherlog_mongo_db = "sherlog"
 env.sherlog_conf_template = '%s/%s.json' % (env.confs_folder_local, SHERLOG)
 env.sherlog_conf = "%s/config/config.json" % env.sherlog_path
+env.sherlog_script = "%(scripts_folder)s/%(sherlog)s.sh" % env
+env.sherlog_script_template = '%(scripts_folder_local)s/%(sherlog)s.sh' % env
+
+
+# Supervisor Configuration
+env.supervisor_ctl = '/usr/bin/supervisorctl'  # supervisorctl script
+env.supervisor_autostart = 'true'  # true or false
+env.supervisor_autorestart = 'true'  # true or false
+env.supervisor_redirect_stderr = 'true'  # true or false
+env.supervisor_stdout_logfile = \
+    '%(logs_folder)s/supervisord_%(project)s.log' % env
+env.supervisord_conf_template = \
+    '%(confs_folder_local)s/supervisord.conf' % env
+env.supervisord_conf = \
+    '%(confs_folder)s/supervisord_%(project)s.conf' % env
 
 
 # Just default Vagrant configuration
@@ -164,6 +182,7 @@ def ensure_dirs():
         env.apps_path,
         env.logs_folder,
         env.confs_folder,
+        env.scripts_folder,
         env.ssl_folder,
         ], owner=env.deploy_user)
 
@@ -252,8 +271,6 @@ def mongo_apt_config():
         ' sudo tee /etc/apt/sources.list.d/mongodb-org-3.0.list')
 
 
-@task
-@roles('all')
 def ensure_sherlog_deps():
     # mongo_apt_config()
     require.deb.ppa('ppa:nginx/stable')
@@ -275,8 +292,6 @@ def upload_sherlog_conf():
     get("%s/public/js/sherlog.min.js" % env.sherlog_path, "generated")
 
 
-@task
-@roles('all')
 def upload_ssl_files():
     files.upload_template(env.ssl_crt_local, env.ssl_crt)
     files.upload_template(env.ssl_key_local, env.ssl_key)
@@ -292,8 +307,6 @@ def test_nginx_conf():
             ' Please review your parameters.'))
 
 
-@task
-@roles('all')
 def upload_nginx_conf():
     files.upload_template(
         env.nginx_conf_temaplte, env.nginx_conf, context=env, use_sudo=True)
@@ -303,6 +316,38 @@ def upload_nginx_conf():
     # sudo('rm -f %s%s' % (env.nginx_enable_path, 'default'))
     test_nginx_conf()
     sudo('nginx -s reload')
+
+
+def upload_sherlog_script():
+    files.upload_template(
+        env.sherlog_script_template, env.sherlog_script, context=env)
+    sudo('chmod +x %s' % env.sherlog_script)
+
+
+def supervisor_restart():
+    with settings(
+            hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
+        res = sudo('%(supervisor_ctl)s restart all' % env)
+    if 'ERROR' in res:
+        print red_bg("NOT STARTED!:\n%s" % res)
+
+
+def reload_supervisorctl():
+    sudo('%(supervisor_ctl)s reread' % env)
+    sudo('%(supervisor_ctl)s reload' % env)
+
+
+@task
+@roles(SHERLOG)
+def upload_supervisord_conf():
+    files.upload_template(
+        env.supervisord_conf_template, env.supervisord_conf,
+        context=env, use_sudo=True)
+    sudo(
+        'ln -sf %s /etc/supervisor/conf.d/%s'
+        % (env.supervisord_conf, basename(env.supervisord_conf)))
+    reload_supervisorctl()
+    supervisor_restart()
 
 
 @task
