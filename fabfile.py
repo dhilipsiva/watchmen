@@ -18,6 +18,8 @@ from contextlib import contextmanager
 import requests
 
 from fabric.state import env
+from fabric.contrib import files
+from fabric.operations import get
 from fabric.decorators import roles
 from fabric.api import run, task, sudo, prefix
 
@@ -27,7 +29,9 @@ from fabtools.utils import abspath
 from fabtools.vagrant import vagrant
 from fabtools.require.git import working_copy
 
-from config import roledefs, SHERLOG
+from config import roledefs, SHERLOG, SHERLOG_TITLE, SHERLOG_USER, \
+    SHERLOG_PASS, SHERLOG_SERVER_URL, SHERLOG_MONGO_HOST, SHERLOG_MONGO_USER, \
+    SHERLOG_MONGO_PASS
 
 vagrant = vagrant  # Silence flake8
 
@@ -40,9 +44,26 @@ env.deploy_user = env.project
 env.deploy_user_home = join("/home", env.deploy_user)
 env.apps_path = join(env.deploy_user_home, 'apps')
 env.code_root = join(env.apps_path, env.project)
+env.local_conf_folder = "confs"
+
+# Sherlog Configuration
 env.sherlog_env = join(env.deploy_user_home, "envs", SHERLOG)
 env.sherlog_path = join(env.deploy_user_home, "apps", SHERLOG)
 env.sherlog_remote = "https://github.com/burakson/sherlogjs.git"
+env.sherlog_node_host = "localhost"
+env.sherlog_node_port = "3000"
+env.sherlog_bind = "%s:%s" % (env.sherlog_node_host, env.sherlog_node_port)
+env.sherlog_title = SHERLOG_TITLE
+env.sherlog_user = SHERLOG_USER
+env.sherlog_pass = SHERLOG_PASS
+env.sherlog_server_url = SHERLOG_SERVER_URL
+env.sherlog_mongo_host = SHERLOG_MONGO_HOST
+env.sherlog_mongo_user = SHERLOG_MONGO_USER
+env.sherlog_mongo_pass = SHERLOG_MONGO_PASS
+env.sherlog_mongo_db = "sherlog"
+env.sherlog_conf_template = '%s/%s.json' % (env.local_conf_folder, SHERLOG)
+env.sherlog_conf = "%s/config/config.json" % env.sherlog_path
+
 
 # Just default Vagrant configuration
 env.roledefs = {
@@ -168,6 +189,7 @@ def ensure_sherlog_node_deps():
     with nodeenv(env.sherlog_env):
         run("cd %s && npm install && bower install --config.interactive=false"
             % env.sherlog_path)
+        run("npm install -g gulp")
 
 
 @task
@@ -215,6 +237,18 @@ def ensure_sherlog_deps():
         # "mongodb-org",
         "mongodb",
     ])
+
+
+@task
+@roles(SHERLOG)
+def upload_sherlog_conf():
+    files.upload_template(
+        env.sherlog_conf_template, env.sherlog_conf,
+        context=env, backup=False, use_sudo=True)
+    # sudo('chmod +x %s' % env.sherlog_conf)
+    with nodeenv(env.sherlog_env):
+        run("cd %s && gulp" % env.sherlog_path)
+    get("%s/public/js/sherlog.min.js" % env.sherlog_path, "generated")
 
 
 @task
