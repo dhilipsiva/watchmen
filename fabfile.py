@@ -22,17 +22,23 @@ from fabric.contrib import files
 from fabric.decorators import roles
 from fabric.operations import get, settings
 from fabric.colors import _wrap_with as wrap_with
-from fabric.api import run, task, sudo, prefix, hide, abort
+from fabric.api import run, task, sudo, prefix, hide, abort, cd
 
 from fabtools import user, require
 from fabtools.files import is_file
 from fabtools.utils import abspath
 from fabtools.vagrant import vagrant
+from fabtools.python import virtualenv
 from fabtools.require.git import working_copy
 
 from config import roledefs, SHERLOG, SHERLOG_TITLE, SHERLOG_USER, \
     SHERLOG_PASS, SHERLOG_SERVER_URL, SHERLOG_MONGO_HOST, SHERLOG_MONGO_USER, \
-    SHERLOG_MONGO_PASS
+    SHERLOG_MONGO_PASS, SENTRY, SENTRY_DB_NAME, SENTRY_DB_USER, \
+    SENTRY_DB_PASS, SENTRY_DB_HOST, SENTRY_DB_PORT, SENTRY_SERVER_URL, \
+    SENTRY_URL_PREFIX, SENTRY_ADMIN_EMAIL, SENTRY_REDIS_INSTANCE, \
+    SENTRY_REDIS_HOST, SENTRY_REDIS_PORT, SENTRY_BROKER_URL, SENTRY_WEB_HOST, \
+    SENTRY_WEB_PORT, SENTRY_EMAIL_HOST, SENTRY_EMAIL_HOST_PASS, \
+    SENTRY_EMAIL_HOST_USER, SENTRY_EMAIL_PORT, SENTRY_EMAIL_USE_TLS
 
 vagrant = vagrant  # Silence flake8
 red_bg = wrap_with('41')
@@ -79,12 +85,38 @@ env.sherlog_server_url = SHERLOG_SERVER_URL
 env.sherlog_mongo_host = SHERLOG_MONGO_HOST
 env.sherlog_mongo_user = SHERLOG_MONGO_USER
 env.sherlog_mongo_pass = SHERLOG_MONGO_PASS
-env.sherlog_mongo_db = "sherlog"
+env.sherlog_mongo_db = "SHERLOG"
 env.sherlog_conf_template = '%s/%s.json' % (env.confs_folder_local, SHERLOG)
 env.sherlog_conf = "%s/config/config.json" % env.sherlog_path
 env.sherlog_script = "%(scripts_folder)s/%(sherlog)s.sh" % env
 env.sherlog_script_template = '%(scripts_folder_local)s/%(sherlog)s.sh' % env
 
+# Sentry configuration
+env.sentry = SENTRY
+env.sentry_env = join(env.envs_path, SENTRY)
+env.sentry_db_name = SENTRY_DB_NAME
+env.sentry_db_user = SENTRY_DB_USER
+env.sentry_db_pass = SENTRY_DB_PASS
+env.sentry_db_host = SENTRY_DB_HOST
+env.sentry_db_port = SENTRY_DB_PORT
+env.sentry_server_url = SENTRY_SERVER_URL
+env.sentry_url_prefix = SENTRY_URL_PREFIX
+env.sentry_admin_email = SENTRY_ADMIN_EMAIL
+env.sentry_redis_instance = SENTRY_REDIS_INSTANCE
+env.sentry_redis_host = SENTRY_REDIS_HOST
+env.sentry_redis_port = SENTRY_REDIS_PORT
+env.sentry_redis_broker_url = SENTRY_BROKER_URL
+env.sentry_web_host = SENTRY_WEB_HOST
+env.sentry_web_port = SENTRY_WEB_PORT
+env.sentry_email_host = SENTRY_EMAIL_HOST
+env.sentry_email_host_pass = SENTRY_EMAIL_HOST_PASS
+env.sentry_email_host_user = SENTRY_EMAIL_HOST_USER
+env.sentry_email_port = SENTRY_EMAIL_PORT
+env.sentry_email_use_tls = SENTRY_EMAIL_USE_TLS
+env.sentry_conf_template = \
+    '%(confs_folder_local)s/sentry.py' % env
+env.sentry_conf = \
+    '%(confs_folder)s/sentry.py' % env
 
 # Supervisor Configuration
 env.supervisor_ctl = '/usr/bin/supervisorctl'  # supervisorctl script
@@ -282,6 +314,29 @@ def ensure_sherlog_deps():
     ])
 
 
+def postgres_apt_config():
+    """
+    docstring for mongo_apt_config
+    """
+    run('echo "deb http://apt.postgresql.org/pub/repos/apt/'
+        ' "$(lsb_release -sc)"-pgdg main" |'
+        ' sudo tee /etc/apt/sources.list.d/pgdg.list')
+    sudo(
+        "wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+        " | apt-key add -")
+
+
+def ensure_sentry_deps():
+    """
+    Fix sentry dependencies
+    """
+    postgres_apt_config()
+    uptodate_index()
+    require.deb.packages([
+        "postgresql-9.4",
+    ])
+
+
 def upload_sherlog_conf():
     files.upload_template(
         env.sherlog_conf_template, env.sherlog_conf,
@@ -364,3 +419,39 @@ def setup_sherlog():
     ensure_nodeenv(env.sherlog_env)
     ensure_sherlog_node_deps()
     upload_sherlog_conf()
+
+
+@task
+@roles(SENTRY)
+def setup_sentry():
+    """
+    Setup sentry
+    """
+    """
+    require.postgres.server()
+    require.postgres.user(
+        SENTRY_DB_USER, password=SENTRY_DB_PASS, createdb=True,
+        createrole=True, login=True, encrypted_password=True)
+    require.postgres.database(SENTRY_DB_NAME, owner=SENTRY_DB_USER)
+    require.redis.instance(
+        SENTRY_REDIS_INSTANCE, bind=SENTRY_REDIS_HOST,
+        port=SENTRY_REDIS_PORT)
+    files.append(
+        "/etc/postgresql/9.4/main/pg_hba.conf",
+        "host    all             %s                               md5" %
+        SENTRY_DB_USER, use_sudo=True)
+    files.upload_template(
+        env.sentry_conf_template, env.sentry_conf,
+        context=env, use_sudo=True)
+    require.deb.packages([
+        "libpq-dev",
+    ])
+    """
+    sudo("/etc/init.d/postgresql restart")
+    require.python.virtualenv(env.sentry_env)
+    with virtualenv(env.sentry_env):
+        require.python.packages([
+            "sentry[postgres]",
+        ])
+        with cd(env.confs_folder):
+            run("sentry --config=sentry.py upgrade")
