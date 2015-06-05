@@ -427,7 +427,6 @@ def setup_sentry():
     """
     Setup sentry
     """
-    """
     require.postgres.server()
     require.postgres.user(
         SENTRY_DB_USER, password=SENTRY_DB_PASS, createdb=True,
@@ -438,7 +437,7 @@ def setup_sentry():
         port=SENTRY_REDIS_PORT)
     files.append(
         "/etc/postgresql/9.4/main/pg_hba.conf",
-        "host    all             %s                               md5" %
+        "local    all             all                               md5" %
         SENTRY_DB_USER, use_sudo=True)
     files.upload_template(
         env.sentry_conf_template, env.sentry_conf,
@@ -446,7 +445,6 @@ def setup_sentry():
     require.deb.packages([
         "libpq-dev",
     ])
-    """
     sudo("/etc/init.d/postgresql restart")
     require.python.virtualenv(env.sentry_env)
     with virtualenv(env.sentry_env):
