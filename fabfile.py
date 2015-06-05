@@ -304,9 +304,11 @@ def test_nginx_conf():
     if 'test failed' in res:
         abort(red_bg(
             'NGINX configuration test failed!'
-            ' Please review your parameters.'))
+            ' Please review your parameters. :%s' % res))
 
 
+@task
+@roles(SHERLOG)
 def upload_nginx_conf():
     files.upload_template(
         env.nginx_conf_temaplte, env.nginx_conf, context=env, use_sudo=True)
