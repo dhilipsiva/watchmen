@@ -37,7 +37,7 @@ from config import roledefs, SHERLOG, SHERLOG_TITLE, SHERLOG_USER, \
     SENTRY_DB_PASS, SENTRY_DB_HOST, SENTRY_DB_PORT, SENTRY_SERVER_URL, \
     SENTRY_URL_PREFIX, SENTRY_ADMIN_EMAIL, SENTRY_REDIS_INSTANCE, \
     SENTRY_REDIS_HOST, SENTRY_REDIS_PORT, SENTRY_BROKER_URL, SENTRY_WEB_HOST, \
-    SENTRY_WEB_PORT, SENTRY_EMAIL_HOST, SENTRY_EMAIL_HOST_PASS, \
+    SENTRY_WEB_PORT, SENTRY_EMAIL_HOST, SENTRY_EMAIL_HOST_PASS, SENTRY_BIND, \
     SENTRY_EMAIL_HOST_USER, SENTRY_EMAIL_PORT, SENTRY_EMAIL_USE_TLS
 
 vagrant = vagrant  # Silence flake8
@@ -93,7 +93,10 @@ env.sherlog_script_template = '%(scripts_folder_local)s/%(sherlog)s.sh' % env
 
 # Sentry configuration
 env.sentry = SENTRY
+env.sentry_worker = "%(sentry)s_worker" % env
 env.sentry_env = join(env.envs_path, SENTRY)
+env.sentry_log = "%(logs_folder)s/%(sentry)s.log" % env
+env.sentry_worker_log = "%(logs_folder)s/%(sentry_worker)s.log" % env
 env.sentry_db_name = SENTRY_DB_NAME
 env.sentry_db_user = SENTRY_DB_USER
 env.sentry_db_pass = SENTRY_DB_PASS
@@ -108,6 +111,7 @@ env.sentry_redis_port = SENTRY_REDIS_PORT
 env.sentry_redis_broker_url = SENTRY_BROKER_URL
 env.sentry_web_host = SENTRY_WEB_HOST
 env.sentry_web_port = SENTRY_WEB_PORT
+env.sentry_bind = SENTRY_BIND
 env.sentry_email_host = SENTRY_EMAIL_HOST
 env.sentry_email_host_pass = SENTRY_EMAIL_HOST_PASS
 env.sentry_email_host_user = SENTRY_EMAIL_HOST_USER
@@ -117,6 +121,12 @@ env.sentry_conf_template = \
     '%(confs_folder_local)s/sentry.py' % env
 env.sentry_conf = \
     '%(confs_folder)s/sentry.py' % env
+env.sentry_script = "%(scripts_folder)s/%(sentry)s.sh" % env
+env.sentry_script_template = '%(scripts_folder_local)s/%(sentry)s.sh' % env
+env.sentry_worker_script = "%(scripts_folder)s/%(sentry_worker)s.sh" % env
+env.sentry_worker_script_template = (
+    '%(scripts_folder_local)s/%(sentry_worker)s.sh' % env
+)
 
 # Supervisor Configuration
 env.supervisor_ctl = '/usr/bin/supervisorctl'  # supervisorctl script
@@ -363,7 +373,7 @@ def test_nginx_conf():
 
 
 @task
-@roles(SHERLOG)
+@roles(SHERLOG, SENTRY)
 def upload_nginx_conf():
     files.upload_template(
         env.nginx_conf_temaplte, env.nginx_conf, context=env, use_sudo=True)
@@ -381,6 +391,16 @@ def upload_sherlog_script():
     sudo('chmod +x %s' % env.sherlog_script)
 
 
+def upload_sentry_script():
+    files.upload_template(
+        env.sentry_script_template, env.sentry_script, context=env)
+    sudo('chmod +x %s' % env.sentry_script)
+    files.upload_template(
+        env.sentry_worker_script_template, env.sentry_worker_script,
+        context=env)
+    sudo('chmod +x %s' % env.sentry_worker_script)
+
+
 def supervisor_restart():
     with settings(
             hide('running', 'stdout', 'stderr', 'warnings'), warn_only=True):
@@ -395,7 +415,7 @@ def reload_supervisorctl():
 
 
 @task
-@roles(SHERLOG)
+@roles(SHERLOG, SENTRY)
 def upload_supervisord_conf():
     files.upload_template(
         env.supervisord_conf_template, env.supervisord_conf,
@@ -437,8 +457,8 @@ def setup_sentry():
         port=SENTRY_REDIS_PORT)
     files.append(
         "/etc/postgresql/9.4/main/pg_hba.conf",
-        "local    all             all                               md5" %
-        SENTRY_DB_USER, use_sudo=True)
+        "local    all             all                               md5",
+        use_sudo=True)
     files.upload_template(
         env.sentry_conf_template, env.sentry_conf,
         context=env, use_sudo=True)
@@ -453,3 +473,4 @@ def setup_sentry():
         ])
         with cd(env.confs_folder):
             run("sentry --config=sentry.py upgrade")
+    upload_sentry_script()
