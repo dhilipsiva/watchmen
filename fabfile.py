@@ -474,3 +474,10 @@ def setup_sentry():
         with cd(env.confs_folder):
             run("sentry --config=sentry.py upgrade")
     upload_sentry_script()
+
+
+@task
+@roles(SENTRY)
+def quick():
+    reload_supervisorctl()
+    supervisor_restart()

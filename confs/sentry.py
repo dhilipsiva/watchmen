@@ -182,3 +182,5 @@ MAILGUN_API_KEY = ''
 # SECRET_KEY
 # Changing this value will result in all current sessions being invalidated
 SECRET_KEY = 'CduEF4XwE09R1OlJTJc6Kr5rALzbyl6S/A+z9oEjcukqitYNxYJtbg=='
+
+SENTRY_FEATURES['auth:register'] = False
