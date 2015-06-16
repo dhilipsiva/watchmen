@@ -21,6 +21,7 @@ from fabric.state import env
 from fabric.contrib import files
 from fabric.decorators import roles
 from fabric.operations import get, settings
+from fabric.context_managers import shell_env
 from fabric.colors import _wrap_with as wrap_with
 from fabric.api import run, task, sudo, prefix, hide, abort, cd
 
@@ -38,7 +39,10 @@ from config import roledefs, SHERLOG, SHERLOG_TITLE, SHERLOG_USER, \
     SENTRY_URL_PREFIX, SENTRY_ADMIN_EMAIL, SENTRY_REDIS_INSTANCE, \
     SENTRY_REDIS_HOST, SENTRY_REDIS_PORT, SENTRY_BROKER_URL, SENTRY_WEB_HOST, \
     SENTRY_WEB_PORT, SENTRY_EMAIL_HOST, SENTRY_EMAIL_HOST_PASS, SENTRY_BIND, \
-    SENTRY_EMAIL_HOST_USER, SENTRY_EMAIL_PORT, SENTRY_EMAIL_USE_TLS
+    SENTRY_EMAIL_HOST_USER, SENTRY_EMAIL_PORT, SENTRY_EMAIL_USE_TLS, DRONE, \
+    DRONE_PORT, DRONE_GITHUB_CLIENT, DRONE_GITHUB_SECRET, DRONE_GITHUB_OPEN, \
+    DRONE_GITHUB_ORGS, DRONE_EMAIL_HOST, DRONE_EMAIL_HOST_PASS, \
+    DRONE_EMAIL_HOST_USER, DRONE_EMAIL_PORT, DRONE_EMAIL_USE_TLS
 
 vagrant = vagrant  # Silence flake8
 red_bg = wrap_with('41')
@@ -139,6 +143,21 @@ env.supervisord_conf_template = \
     '%(confs_folder_local)s/supervisord.conf' % env
 env.supervisord_conf = \
     '%(confs_folder)s/supervisord_%(project)s.conf' % env
+
+env.drone = DRONE
+env.drone_path = join(env.apps_path, DRONE)
+env.drone_log = "%(logs_folder)s/%(drone)s.log" % env
+env.drone_remote = "https://github.com/drone/drone.git"
+env.drone_port = DRONE_PORT
+env.drone_github_client = DRONE_GITHUB_CLIENT
+env.drone_github_secret = DRONE_GITHUB_SECRET
+env.drone_github_open = DRONE_GITHUB_OPEN
+env.drone_github_orgs = DRONE_GITHUB_ORGS
+env.drone_email_host = DRONE_EMAIL_HOST
+env.drone_email_pass = DRONE_EMAIL_HOST_PASS
+env.drone_email_user = DRONE_EMAIL_HOST_USER
+env.drone_email_port = DRONE_EMAIL_PORT
+env.drone_email_use_tls = DRONE_EMAIL_USE_TLS
 
 
 # Just default Vagrant configuration
@@ -324,6 +343,16 @@ def ensure_sherlog_deps():
     ])
 
 
+def ensure_drone_deps():
+    uptodate_index()
+    require.deb.packages([
+        "golang",
+        "unzip",
+        "libsqlite3-dev",
+        "docker.io",
+    ])
+
+
 def postgres_apt_config():
     """
     docstring for mongo_apt_config
@@ -344,6 +373,7 @@ def ensure_sentry_deps():
     uptodate_index()
     require.deb.packages([
         "postgresql-9.4",
+        "nginx",
     ])
 
 
@@ -481,3 +511,19 @@ def setup_sentry():
 def quick():
     reload_supervisorctl()
     supervisor_restart()
+
+
+@task
+@roles(DRONE)
+def setup_drone():
+    """
+    docstring for setup_drone
+    """
+    # ensure_common_deps()
+    # ensure_drone_deps()
+    # ensure_dirs()
+    # working_copy(env.drone_remote, env.drone_path)
+    with cd(env.drone_path) and shell_env(GOPATH=env.drone_path):
+        run("make deps")
+        run("make build")
+        run("make install")

@@ -23,3 +23,4 @@ Constants
 SHERLOG = 'sherlog'
 GRAPHITE = 'graphite'
 SENTRY = 'sentry'
+DRONE = 'drone'

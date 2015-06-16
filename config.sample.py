@@ -1,4 +1,4 @@
-from constants import SHERLOG, SENTRY
+from constants import SHERLOG, SENTRY, DRONE
 
 roledefs = {
     SHERLOG: [
@@ -6,6 +6,9 @@ roledefs = {
     ],
     SENTRY: [
         '1.2.3.4',  # List of IP that will run sentry (Tyically, just one IP)
+    ],
+    DRONE: [
+        '1.2.3.4',  # Drone IPs
     ],
 }
 
@@ -38,3 +41,15 @@ SENTRY_EMAIL_HOST_PASS = 'pass'
 SENTRY_EMAIL_HOST_USER = 'sentry@example.com'
 SENTRY_EMAIL_PORT = "465"
 SENTRY_EMAIL_USE_TLS = "True"  # [IMPORTANT] Use only empty string for `False`
+
+
+DRONE_PORT = 80
+DRONE_GITHUB_CLIENT = "c0aaff74c060ff4a950d"
+DRONE_GITHUB_SECRET = "1ac1eae5ff1b490892f5546f837f306265032412"
+DRONE_GITHUB_OPEN = "false"
+DRONE_GITHUB_ORGS = '"drone", "docker"'  # Yes, Double quotes within single
+DRONE_EMAIL_HOST = 'smtp.gmail.com'
+DRONE_EMAIL_HOST_PASS = 'pass'
+DRONE_EMAIL_HOST_USER = 'sentry@example.com'
+DRONE_EMAIL_PORT = "465"
+DRONE_EMAIL_USE_TLS = "True"  # [IMPORTANT] Use only empty string for `False`
