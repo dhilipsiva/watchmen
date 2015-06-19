@@ -218,7 +218,6 @@ def create_deploy_user():
 
 
 @task
-@roles("all")
 def sync_auth_keys():
     """
     Add multiple public keys to the user's authorized SSH keys from GitHub.
@@ -525,19 +524,19 @@ def setup_drone():
     """
     docstring for setup_drone
     """
-    # ensure_common_deps()
-    # ensure_drone_deps()
-    # ensure_dirs()
-    # working_copy(env.drone_remote, env.drone_path)
-    # with cd(env.drone_path) and shell_env(GOPATH=env.drone_path):
+    ensure_common_deps()
+    ensure_drone_deps()
+    ensure_dirs()
+    working_copy(env.drone_remote, env.drone_path)
     files.append(env.bashrc, 'export GOROOT="%(goroot)s"' % env)
-    # files.append(env.bashrc, 'export GOPATH="%(gopath)s"' % env)
+    files.append(env.bashrc, 'export GOPATH="%(gopath)s"' % env)
     files.append(env.bashrc, 'export GOPATH="%(drone_path)s"' % env)
     files.append(env.bashrc, 'export PATH="$PATH:$GOROOT/bin:$GOPATH/bin"')
     with cd(env.deploy_user_home):
-        # run("wget"
-        #     " https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz")
-        # run("tar xvzf go1.4.linux-amd64.tar.gz -C %(goroot)s --strip-components=1" % env)
+        run("wget"
+            " https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz")
+        run("tar xvzf go1.4.linux-amd64.tar.gz -C %(goroot)s"
+            " --strip-components=1" % env)
         pass
     with cd(env.drone_path):
         run("make deps build embed install")
