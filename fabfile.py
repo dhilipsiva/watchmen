@@ -21,7 +21,7 @@ from fabric.state import env
 from fabric.contrib import files
 from fabric.decorators import roles
 from fabric.operations import get, settings
-from fabric.context_managers import shell_env
+# from fabric.context_managers import shell_env
 from fabric.colors import _wrap_with as wrap_with
 from fabric.api import run, task, sudo, prefix, hide, abort, cd
 
@@ -54,6 +54,7 @@ env.project = 'watchmen'
 env.repository = 'git@github.com:dhilipsiva/watchmen.git'
 env.deploy_user = env.project
 env.deploy_user_home = join("/home", env.deploy_user)
+env.bashrc = join(env.deploy_user_home, '.bashrc')
 env.apps_path = join(env.deploy_user_home, 'apps')
 env.envs_path = join(env.deploy_user_home, 'envs')
 env.code_root = join(env.apps_path, env.project)
@@ -62,6 +63,8 @@ env.confs_folder_local = "confs"
 env.confs_folder = "%(deploy_user_home)s/confs" % env
 env.scripts_folder_local = "scripts"
 env.scripts_folder = "%(deploy_user_home)s/scripts" % env
+env.goroot = "%(deploy_user_home)s/goroot" % env
+env.gopath = "%(deploy_user_home)s/gopath" % env
 
 # Nginx configs
 env.nginx_conf_temaplte = "%s/nginx.conf" % env.confs_folder_local
@@ -350,6 +353,9 @@ def ensure_drone_deps():
         "unzip",
         "libsqlite3-dev",
         "docker.io",
+        "ca-certificates",
+        "mercurial",
+        "bzr",
     ])
 
 
@@ -523,7 +529,15 @@ def setup_drone():
     # ensure_drone_deps()
     # ensure_dirs()
     # working_copy(env.drone_remote, env.drone_path)
-    with cd(env.drone_path) and shell_env(GOPATH=env.drone_path):
-        run("make deps")
-        run("make build")
-        run("make install")
+    # with cd(env.drone_path) and shell_env(GOPATH=env.drone_path):
+    files.append(env.bashrc, 'export GOROOT="%(goroot)s"' % env)
+    # files.append(env.bashrc, 'export GOPATH="%(gopath)s"' % env)
+    files.append(env.bashrc, 'export GOPATH="%(drone_path)s"' % env)
+    files.append(env.bashrc, 'export PATH="$PATH:$GOROOT/bin:$GOPATH/bin"')
+    with cd(env.deploy_user_home):
+        # run("wget"
+        #     " https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz")
+        # run("tar xvzf go1.4.linux-amd64.tar.gz -C %(goroot)s --strip-components=1" % env)
+        pass
+    with cd(env.drone_path):
+        run("make deps build embed install")
