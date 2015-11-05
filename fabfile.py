@@ -73,7 +73,7 @@ env.ssl_folder = "%(deploy_user_home)s/ssl" % env
 env.ssl_crt = "%(ssl_folder)s/%(project)s.crt" % env
 env.ssl_key = "%(ssl_folder)s/%(project)s.key" % env
 env.ssl_crt_local = "%(confs_folder_local)s/%(project)s.crt" % env
-env.ssl_key_local = "%(confs_folder_local)s/%(project)s.key" % env
+env.ssl_key_local = "%(confs_folder_local)s/%(project)s.pem" % env
 env.nginx_enable_path = "/etc/nginx/sites-enabled/"
 
 # Sherlog Configuration
